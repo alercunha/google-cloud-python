@@ -16,6 +16,7 @@
 
 from google.protobuf.struct_pb2 import ListValue
 from google.protobuf.struct_pb2 import Value
+from google.cloud import exceptions
 from google.cloud.proto.spanner.v1 import type_pb2
 import six
 
@@ -42,7 +43,6 @@ class StreamedResultSet(object):
         self._counter = 0           # Counter for processed responses
         self._metadata = None       # Until set from first PRS
         self._stats = None          # Until set from last PRS
-        self._resume_token = None   # To resume from last received PRS
         self._current_row = []      # Accumulated values for incomplete row
         self._pending_chunk = None  # Incomplete value
         self._source = source       # Source snapshot
@@ -84,15 +84,6 @@ class StreamedResultSet(object):
         """
         return self._stats
 
-    @property
-    def resume_token(self):
-        """Token for resuming interrupted read / query.
-
-        :rtype: bytes
-        :returns: token from last chunk of results.
-        """
-        return self._resume_token
-
     def _merge_chunk(self, value):
         """Merge pending chunk with next value.
 
@@ -131,7 +122,6 @@ class StreamedResultSet(object):
         """
         response = six.next(self._response_iterator)
         self._counter += 1
-        self._resume_token = response.resume_token
 
         if self._metadata is None:  # first response
             metadata = self._metadata = response.metadata
@@ -168,6 +158,48 @@ class StreamedResultSet(object):
                 iter_rows, self._rows[:] = self._rows[:], ()
             while iter_rows:
                 yield iter_rows.pop(0)
+
+    def one(self):
+        """Return exactly one result, or raise an exception.
+
+        :raises: :exc:`NotFound`: If there are no results.
+        :raises: :exc:`ValueError`: If there are multiple results.
+        :raises: :exc:`RuntimeError`: If consumption has already occurred,
+            in whole or in part.
+        """
+        answer = self.one_or_none()
+        if answer is None:
+            raise exceptions.NotFound('No rows matched the given query.')
+        return answer
+
+    def one_or_none(self):
+        """Return exactly one result, or None if there are no results.
+
+        :raises: :exc:`ValueError`: If there are multiple results.
+        :raises: :exc:`RuntimeError`: If consumption has already occurred,
+            in whole or in part.
+        """
+        # Sanity check: Has consumption of this query already started?
+        # If it has, then this is an exception.
+        if self._metadata is not None:
+            raise RuntimeError('Can not call `.one` or `.one_or_none` after '
+                               'stream consumption has already started.')
+
+        # Consume the first result of the stream.
+        # If there is no first result, then return None.
+        iterator = iter(self)
+        try:
+            answer = next(iterator)
+        except StopIteration:
+            return None
+
+        # Attempt to consume more. This should no-op; if we get additional
+        # rows, then this is an error case.
+        try:
+            next(iterator)
+            raise ValueError('Expected one result; got more.')
+        except StopIteration:
+            return answer
 
 
 class Unmergeable(ValueError):
@@ -255,13 +287,15 @@ def _merge_struct(lhs, rhs, type_):
 
 
 _MERGE_BY_TYPE = {
-    type_pb2.BOOL: _unmergeable,
-    type_pb2.INT64: _merge_string,
-    type_pb2.FLOAT64: _merge_float64,
-    type_pb2.STRING: _merge_string,
     type_pb2.ARRAY: _merge_array,
-    type_pb2.STRUCT: _merge_struct,
+    type_pb2.BOOL: _unmergeable,
     type_pb2.BYTES: _merge_string,
+    type_pb2.DATE: _merge_string,
+    type_pb2.FLOAT64: _merge_float64,
+    type_pb2.INT64: _merge_string,
+    type_pb2.STRING: _merge_string,
+    type_pb2.STRUCT: _merge_struct,
+    type_pb2.TIMESTAMP: _merge_string,
 }
 
 

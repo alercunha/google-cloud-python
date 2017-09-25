@@ -518,6 +518,7 @@ class _LoadConfiguration(object):
     _field_delimiter = None
     _ignore_unknown_values = None
     _max_bad_records = None
+    _null_marker = None
     _quote_character = None
     _skip_leading_rows = None
     _source_format = None
@@ -672,6 +673,11 @@ class LoadTableFromStorageJob(_AsyncJob):
     https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs#configuration.load.maxBadRecords
     """
 
+    null_marker = _TypedProperty('null_marker', six.string_types)
+    """See
+    https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs#configuration.load.nullMarker
+    """
+
     quote_character = _TypedProperty('quote_character', six.string_types)
     """See
     https://cloud.google.com/bigquery/docs/reference/rest/v2/jobs#configuration.load.quote
@@ -710,6 +716,8 @@ class LoadTableFromStorageJob(_AsyncJob):
             configuration['ignoreUnknownValues'] = self.ignore_unknown_values
         if self.max_bad_records is not None:
             configuration['maxBadRecords'] = self.max_bad_records
+        if self.null_marker is not None:
+            configuration['nullMarker'] = self.null_marker
         if self.quote_character is not None:
             configuration['quote'] = self.quote_character
         if self.skip_leading_rows is not None:
@@ -1077,6 +1085,7 @@ class QueryJob(_AsyncJob):
         self.udf_resources = udf_resources
         self.query_parameters = query_parameters
         self._configuration = _AsyncQueryConfiguration()
+        self._query_results = None
 
     allow_large_results = _TypedProperty('allow_large_results', bool)
     """See
@@ -1276,23 +1285,49 @@ class QueryJob(_AsyncJob):
         :rtype: :class:`~google.cloud.bigquery.query.QueryResults`
         :returns: results instance
         """
-        from google.cloud.bigquery.query import QueryResults
-        return QueryResults.from_query_job(self)
+        if not self._query_results:
+            self._query_results = self._client._get_query_results(self.name)
+        return self._query_results
+
+    def done(self):
+        """Refresh the job and checks if it is complete.
+
+        :rtype: bool
+        :returns: True if the job is complete, False otherwise.
+        """
+        # Do not refresh is the state is already done, as the job will not
+        # change once complete.
+        if self.state != _DONE_STATE:
+            self._query_results = self._client._get_query_results(self.name)
+
+            # Only reload the job once we know the query is complete.
+            # This will ensure that fields such as the destination table are
+            # correctly populated.
+            if self._query_results.complete:
+                self.reload()
+
+        return self.state == _DONE_STATE
 
     def result(self, timeout=None):
         """Start the job and wait for it to complete and get the result.
 
         :type timeout: int
-        :param timeout: How long to wait for job to complete before raising
-            a :class:`TimeoutError`.
+        :param timeout:
+            How long to wait for job to complete before raising a
+            :class:`TimeoutError`.
 
-        :rtype: :class:`~google.cloud.bigquery.query.QueryResults`
-        :returns: The query results.
+        :rtype: :class:`~google.api.core.page_iterator.Iterator`
+        :returns:
+            Iterator of row data :class:`tuple`s. During each page, the
+            iterator will have the ``total_rows`` attribute set, which counts
+            the total number of rows **in the result set** (this is distinct
+            from the total number of rows in the current page:
+            ``iterator.page.num_items``).
 
         :raises: :class:`~google.cloud.exceptions.GoogleCloudError` if the job
             failed or  :class:`TimeoutError` if the job did not complete in the
             given timeout.
         """
         super(QueryJob, self).result(timeout=timeout)
-        # Return a QueryResults instance instead of returning the job.
-        return self.query_results()
+        # Return an iterator instead of returning the job.
+        return self.query_results().fetch_data()

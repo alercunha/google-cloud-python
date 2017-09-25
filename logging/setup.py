@@ -51,14 +51,14 @@ SETUP_BASE = {
 
 
 REQUIREMENTS = [
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
     'grpcio >= 1.2.0, < 2.0dev',
     'gapic-google-cloud-logging-v2 >= 0.91.0, < 0.92dev',
 ]
 
 setup(
     name='google-cloud-logging',
-    version='1.2.0',
+    version='1.3.0',
     description='Python Client for Stackdriver Logging',
     long_description=README,
     namespace_packages=[

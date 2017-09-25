@@ -197,12 +197,12 @@ class TestVisionClientLogo(unittest.TestCase):
         self.assertEqual(len(logo.bounds.vertices), 4)
         self.assertEqual(logo.bounds.vertices[0].x_coordinate, 40)
         self.assertEqual(logo.bounds.vertices[0].y_coordinate, 40)
-        self.assertEqual(logo.bounds.vertices[1].x_coordinate, 959)
+        self.assertEqual(logo.bounds.vertices[1].x_coordinate, 940)
         self.assertEqual(logo.bounds.vertices[1].y_coordinate, 40)
-        self.assertEqual(logo.bounds.vertices[2].x_coordinate, 959)
-        self.assertEqual(logo.bounds.vertices[2].y_coordinate, 302)
+        self.assertEqual(logo.bounds.vertices[2].x_coordinate, 940)
+        self.assertEqual(logo.bounds.vertices[2].y_coordinate, 243)
         self.assertEqual(logo.bounds.vertices[3].x_coordinate, 40)
-        self.assertEqual(logo.bounds.vertices[3].y_coordinate, 302)
+        self.assertEqual(logo.bounds.vertices[3].y_coordinate, 243)
         self.assertTrue(logo.score > 0.25)
 
     def test_detect_logos_content(self):

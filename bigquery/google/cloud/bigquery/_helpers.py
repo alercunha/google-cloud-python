@@ -16,6 +16,7 @@
 
 import base64
 from collections import OrderedDict
+import copy
 import datetime
 
 from google.cloud._helpers import UTC
@@ -71,10 +72,26 @@ def _timestamp_from_json(value, field):
 
 
 def _datetime_from_json(value, field):
-    """Coerce 'value' to a datetime, if set or not nullable."""
+    """Coerce 'value' to a datetime, if set or not nullable.
+
+    Args:
+        value (str): The timestamp.
+        field (.SchemaField): The field corresponding to the value.
+
+    Returns:
+        Optional[datetime.datetime]: The parsed datetime object from
+        ``value`` if the ``field`` is not null (otherwise it is
+        :data:`None`).
+    """
     if _not_null(value, field):
-        # value will be a string, in YYYY-MM-DDTHH:MM:SS form.
-        return datetime.datetime.strptime(value, _RFC3339_NO_FRACTION)
+        if '.' in value:
+            # YYYY-MM-DDTHH:MM:SS.ffffff
+            return datetime.datetime.strptime(value, _RFC3339_MICROS_NO_ZULU)
+        else:
+            # YYYY-MM-DDTHH:MM:SS
+            return datetime.datetime.strptime(value, _RFC3339_NO_FRACTION)
+    else:
+        return None
 
 
 def _date_from_json(value, field):
@@ -328,9 +345,14 @@ class UDFResource(object):
         self.value = value
 
     def __eq__(self, other):
+        if not isinstance(other, UDFResource):
+            return NotImplemented
         return(
             self.udf_type == other.udf_type and
             self.value == other.value)
+
+    def __ne__(self, other):
+        return not self == other
 
 
 class UDFResourcesProperty(object):
@@ -447,6 +469,31 @@ class ScalarQueryParameter(AbstractQueryParameter):
             resource['name'] = self.name
         return resource
 
+    def _key(self):
+        """A tuple key that uniquely describes this field.
+
+        Used to compute this instance's hashcode and evaluate equality.
+
+        Returns:
+            tuple: The contents of this :class:`ScalarQueryParameter`.
+        """
+        return (
+            self.name,
+            self.type_.upper(),
+            self.value,
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, ScalarQueryParameter):
+            return NotImplemented
+        return self._key() == other._key()
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __repr__(self):
+        return 'ScalarQueryParameter{}'.format(self._key())
+
 
 class ArrayQueryParameter(AbstractQueryParameter):
     """Named / positional query parameters for array values.
@@ -486,15 +533,24 @@ class ArrayQueryParameter(AbstractQueryParameter):
         return cls(None, array_type, values)
 
     @classmethod
-    def from_api_repr(cls, resource):
-        """Factory: construct parameter from JSON resource.
+    def _from_api_repr_struct(cls, resource):
+        name = resource.get('name')
+        converted = []
+        # We need to flatten the array to use the StructQueryParameter
+        # parse code.
+        resource_template = {
+            # The arrayType includes all the types of the fields of the STRUCT
+            'parameterType': resource['parameterType']['arrayType']
+        }
+        for array_value in resource['parameterValue']['arrayValues']:
+            struct_resource = copy.deepcopy(resource_template)
+            struct_resource['parameterValue'] = array_value
+            struct_value = StructQueryParameter.from_api_repr(struct_resource)
+            converted.append(struct_value)
+        return cls(name, 'STRUCT', converted)
 
-        :type resource: dict
-        :param resource: JSON mapping of parameter
-
-        :rtype: :class:`ArrayQueryParameter`
-        :returns: instance
-        """
+    @classmethod
+    def _from_api_repr_scalar(cls, resource):
         name = resource.get('name')
         array_type = resource['parameterType']['arrayType']['type']
         values = [
@@ -505,6 +561,21 @@ class ArrayQueryParameter(AbstractQueryParameter):
             _CELLDATA_FROM_JSON[array_type](value, None) for value in values]
         return cls(name, array_type, converted)
 
+    @classmethod
+    def from_api_repr(cls, resource):
+        """Factory: construct parameter from JSON resource.
+
+        :type resource: dict
+        :param resource: JSON mapping of parameter
+
+        :rtype: :class:`ArrayQueryParameter`
+        :returns: instance
+        """
+        array_type = resource['parameterType']['arrayType']['type']
+        if array_type == 'STRUCT':
+            return cls._from_api_repr_struct(resource)
+        return cls._from_api_repr_scalar(resource)
+
     def to_api_repr(self):
         """Construct JSON API representation for the parameter.
 
@@ -512,7 +583,7 @@ class ArrayQueryParameter(AbstractQueryParameter):
         :returns: JSON mapping
         """
         values = self.values
-        if self.array_type == 'RECORD':
+        if self.array_type == 'RECORD' or self.array_type == 'STRUCT':
             reprs = [value.to_api_repr() for value in values]
             a_type = reprs[0]['parameterType']
             a_values = [repr_['parameterValue'] for repr_ in reprs]
@@ -534,6 +605,31 @@ class ArrayQueryParameter(AbstractQueryParameter):
         if self.name is not None:
             resource['name'] = self.name
         return resource
+
+    def _key(self):
+        """A tuple key that uniquely describes this field.
+
+        Used to compute this instance's hashcode and evaluate equality.
+
+        Returns:
+            tuple: The contents of this :class:`ArrayQueryParameter`.
+        """
+        return (
+            self.name,
+            self.array_type.upper(),
+            self.values,
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, ArrayQueryParameter):
+            return NotImplemented
+        return self._key() == other._key()
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __repr__(self):
+        return 'ArrayQueryParameter{}'.format(self._key())
 
 
 class StructQueryParameter(AbstractQueryParameter):
@@ -585,14 +681,32 @@ class StructQueryParameter(AbstractQueryParameter):
         """
         name = resource.get('name')
         instance = cls(name)
+        type_resources = {}
         types = instance.struct_types
         for item in resource['parameterType']['structTypes']:
             types[item['name']] = item['type']['type']
+            type_resources[item['name']] = item['type']
         struct_values = resource['parameterValue']['structValues']
         for key, value in struct_values.items():
             type_ = types[key]
-            value = value['value']
-            converted = _CELLDATA_FROM_JSON[type_](value, None)
+            converted = None
+            if type_ == 'STRUCT':
+                struct_resource = {
+                    'name': key,
+                    'parameterType': type_resources[key],
+                    'parameterValue': value,
+                }
+                converted = StructQueryParameter.from_api_repr(struct_resource)
+            elif type_ == 'ARRAY':
+                struct_resource = {
+                    'name': key,
+                    'parameterType': type_resources[key],
+                    'parameterValue': value,
+                }
+                converted = ArrayQueryParameter.from_api_repr(struct_resource)
+            else:
+                value = value['value']
+                converted = _CELLDATA_FROM_JSON[type_](value, None)
             instance.struct_values[key] = converted
         return instance
 
@@ -629,6 +743,31 @@ class StructQueryParameter(AbstractQueryParameter):
         if self.name is not None:
             resource['name'] = self.name
         return resource
+
+    def _key(self):
+        """A tuple key that uniquely describes this field.
+
+        Used to compute this instance's hashcode and evaluate equality.
+
+        Returns:
+            tuple: The contents of this :class:`ArrayQueryParameter`.
+        """
+        return (
+            self.name,
+            self.struct_types,
+            self.struct_values,
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, StructQueryParameter):
+            return NotImplemented
+        return self._key() == other._key()
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __repr__(self):
+        return 'StructQueryParameter{}'.format(self._key())
 
 
 class QueryParametersProperty(object):
@@ -679,7 +818,7 @@ def _item_to_row(iterator, resource):
         added to the iterator after being created, which
         should be done by the caller.
 
-    :type iterator: :class:`~google.cloud.iterator.Iterator`
+    :type iterator: :class:`~google.api.core.page_iterator.Iterator`
     :param iterator: The iterator that is currently in use.
 
     :type resource: dict
@@ -695,7 +834,7 @@ def _item_to_row(iterator, resource):
 def _rows_page_start(iterator, page, response):
     """Grab total rows when :class:`~google.cloud.iterator.Page` starts.
 
-    :type iterator: :class:`~google.cloud.iterator.Iterator`
+    :type iterator: :class:`~google.api.core.page_iterator.Iterator`
     :param iterator: The iterator that is currently in use.
 
     :type page: :class:`~google.cloud.iterator.Page`

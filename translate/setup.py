@@ -51,12 +51,12 @@ SETUP_BASE = {
 
 
 REQUIREMENTS = [
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
 ]
 
 setup(
     name='google-cloud-translate',
-    version='1.1.0',
+    version='1.2.0',
     description='Python Client for Google Cloud Translation API',
     long_description=README,
     namespace_packages=[

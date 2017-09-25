@@ -51,12 +51,12 @@ SETUP_BASE = {
 
 
 REQUIREMENTS = [
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
 ]
 
 setup(
     name='google-cloud-runtimeconfig',
-    version='0.26.0',
+    version='0.27.0',
     description='Python Client for Google Cloud RuntimeConfig',
     long_description=README,
     namespace_packages=[

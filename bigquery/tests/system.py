@@ -35,6 +35,7 @@ from test_utils.retry import RetryResult
 from test_utils.system import unique_resource_id
 
 
+JOB_TIMEOUT = 120  # 2 minutes
 WHERE = os.path.abspath(os.path.dirname(__file__))
 
 
@@ -381,8 +382,7 @@ class TestBigQuery(unittest.TestCase):
                 )
 
         # Retry until done.
-        retry = RetryInstanceState(_job_done, max_tries=8)
-        retry(job.reload)()
+        job.result(timeout=JOB_TIMEOUT)
 
         self.assertEqual(job.output_rows, len(ROWS))
 
@@ -419,8 +419,7 @@ class TestBigQuery(unittest.TestCase):
             )
 
         # Retry until done.
-        retry = RetryInstanceState(_job_done, max_tries=8)
-        retry(job.reload)()
+        job.result(timeout=JOB_TIMEOUT)
 
         self.assertEqual(job.output_rows, len(ROWS))
 
@@ -640,8 +639,11 @@ class TestBigQuery(unittest.TestCase):
 
     def _generate_standard_sql_types_examples(self):
         naive = datetime.datetime(2016, 12, 5, 12, 41, 9)
+        naive_microseconds = datetime.datetime(2016, 12, 5, 12, 41, 9, 250000)
         stamp = '%s %s' % (naive.date().isoformat(), naive.time().isoformat())
+        stamp_microseconds = stamp + '.250000'
         zoned = naive.replace(tzinfo=UTC)
+        zoned_microseconds = naive_microseconds.replace(tzinfo=UTC)
         return [
             {
                 'sql': 'SELECT 1',
@@ -668,8 +670,17 @@ class TestBigQuery(unittest.TestCase):
                 'expected': zoned,
             },
             {
+                'sql': 'SELECT TIMESTAMP "%s"' % (stamp_microseconds,),
+                'expected': zoned_microseconds,
+            },
+            {
                 'sql': 'SELECT DATETIME(TIMESTAMP "%s")' % (stamp,),
                 'expected': naive,
+            },
+            {
+                'sql': 'SELECT DATETIME(TIMESTAMP "%s")' % (
+                    stamp_microseconds,),
+                'expected': naive_microseconds,
             },
             {
                 'sql': 'SELECT DATE(TIMESTAMP "%s")' % (stamp,),
@@ -741,6 +752,16 @@ class TestBigQuery(unittest.TestCase):
             row = Config.CURSOR.fetchone()
             self.assertIsNone(row)
 
+    def test_dbapi_fetchall(self):
+        query = 'SELECT * FROM UNNEST([(1, 2), (3, 4), (5, 6)])'
+
+        for arraysize in range(1, 5):
+            Config.CURSOR.execute(query)
+            self.assertEqual(Config.CURSOR.rowcount, 3, "expected 3 rows")
+            Config.CURSOR.arraysize = arraysize
+            rows = Config.CURSOR.fetchall()
+            self.assertEqual(rows, [(1, 2), (3, 4), (5, 6)])
+
     def _load_table_for_dml(self, rows, dataset_name, table_name):
         from google.cloud._testing import _NamedTemporaryFile
 
@@ -770,8 +791,7 @@ class TestBigQuery(unittest.TestCase):
                 )
 
         # Retry until done.
-        retry = RetryInstanceState(_job_done, max_tries=8)
-        retry(job.reload)()
+        job.result(timeout=JOB_TIMEOUT)
         self._fetch_single_page(table)
 
     def test_sync_query_w_dml(self):
@@ -799,7 +819,9 @@ class TestBigQuery(unittest.TestCase):
             WHERE greeting = 'Hello World'
             """
 
-        Config.CURSOR.execute(query_template.format(dataset_name, table_name))
+        Config.CURSOR.execute(
+            query_template.format(dataset_name, table_name),
+            job_id='test_dbapi_w_dml_{}'.format(unique_resource_id()))
         self.assertEqual(Config.CURSOR.rowcount, 1)
         self.assertIsNone(Config.CURSOR.fetchone())
 
@@ -865,6 +887,16 @@ class TestBigQuery(unittest.TestCase):
             name='friends', array_type='STRING',
             values=[phred_name, bharney_name])
         with_friends_param = StructQueryParameter(None, friends_param)
+        top_left_param = StructQueryParameter(
+            'top_left',
+            ScalarQueryParameter('x', 'INT64', 12),
+            ScalarQueryParameter('y', 'INT64', 102))
+        bottom_right_param = StructQueryParameter(
+            'bottom_right',
+            ScalarQueryParameter('x', 'INT64', 22),
+            ScalarQueryParameter('y', 'INT64', 92))
+        rectangle_param = StructQueryParameter(
+            'rectangle', top_left_param, bottom_right_param)
         examples = [
             {
                 'sql': 'SELECT @question',
@@ -920,6 +952,14 @@ class TestBigQuery(unittest.TestCase):
                 'sql': 'SELECT (@hitchhiker.question, @hitchhiker.answer)',
                 'expected': ({'_field_1': question, '_field_2': answer}),
                 'query_parameters': [struct_param],
+            },
+            {
+                'sql':
+                    'SELECT '
+                    '((@rectangle.bottom_right.x - @rectangle.top_left.x) '
+                    '* (@rectangle.top_left.y - @rectangle.bottom_right.y))',
+                'expected': 100,
+                'query_parameters': [rectangle_param],
             },
             {
                 'sql': 'SELECT ?',
@@ -1077,7 +1117,7 @@ class TestBigQuery(unittest.TestCase):
         query.use_legacy_sql = False
         query.run()
 
-        iterator = query.fetch_data()
+        iterator = query.fetch_data(max_results=100)
         rows = list(iterator)
         self.assertEqual(len(rows), LIMIT)
 
@@ -1086,7 +1126,7 @@ class TestBigQuery(unittest.TestCase):
             str(uuid.uuid4()), 'SELECT 1')
         query_job.use_legacy_sql = False
 
-        iterator = query_job.result().fetch_data()
+        iterator = query_job.result(timeout=JOB_TIMEOUT)
         rows = list(iterator)
         self.assertEqual(rows, [(1,)])
 

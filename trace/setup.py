@@ -10,12 +10,12 @@ from setuptools import setup, find_packages
 install_requires = [
     'google-gax>=0.15.7, <0.16dev',
     'googleapis-common-protos[grpc]>=1.5.2, <2.0dev',
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
 ]
 
 setup(
     name='google-cloud-trace',
-    version='0.15.4',
+    version='0.15.5',
     author='Google Inc',
     author_email='googleapis-packages@google.com',
     classifiers=[
@@ -38,7 +38,12 @@ setup(
     license='Apache-2.0',
     packages=find_packages(),
     namespace_packages=[
-        'google', 'google.cloud', 'google.cloud.gapic',
-        'google.cloud.gapic.trace'
+        'google',
+        'google.cloud',
+        'google.cloud.gapic',
+        'google.cloud.gapic.trace',
+        'google.cloud.proto',
+        'google.cloud.proto.devtools',
+        'google.cloud.proto.devtools.cloudtrace',
     ],
     url='https://github.com/googleapis/googleapis')

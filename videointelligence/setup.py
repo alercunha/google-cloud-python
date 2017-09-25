@@ -29,16 +29,12 @@ setup(
     author='Google Cloud Platform',
     author_email='googleapis-publisher@google.com',
     name='google-cloud-videointelligence',
-    version='0.25.0',
+    version='0.27.2',
     description='Python Client for Google Cloud Video Intelligence',
     long_description=readme,
     namespace_packages=[
         'google',
         'google.cloud',
-        'google.cloud.gapic',
-        'google.cloud.gapic.videointelligence',
-        'google.cloud.proto',
-        'google.cloud.proto.videointelligence',
     ],
     packages=find_packages(exclude=('tests*',)),
     install_requires=(
@@ -53,7 +49,7 @@ setup(
     zip_safe=False,
     scripts=[],
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',
         'License :: OSI Approved :: Apache Software License',
         'Operating System :: OS Independent',

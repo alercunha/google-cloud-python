@@ -24,6 +24,7 @@ from grpc import StatusCode
 
 # pylint: disable=ungrouped-imports
 from google.cloud.exceptions import NotFound
+from google.cloud.exceptions import GrpcRendezvous
 from google.cloud.spanner._helpers import _options_with_prefix
 from google.cloud.spanner.batch import Batch
 from google.cloud.spanner.snapshot import Snapshot
@@ -164,8 +165,7 @@ class Session(object):
 
         return Snapshot(self, **kw)
 
-    def read(self, table, columns, keyset, index='', limit=0,
-             resume_token=b''):
+    def read(self, table, columns, keyset, index='', limit=0):
         """Perform a ``StreamingRead`` API request for rows in a table.
 
         :type table: str
@@ -184,17 +184,12 @@ class Session(object):
         :type limit: int
         :param limit: (Optional) maxiumn number of rows to return
 
-        :type resume_token: bytes
-        :param resume_token: token for resuming previously-interrupted read
-
         :rtype: :class:`~google.cloud.spanner.streamed.StreamedResultSet`
         :returns: a result set instance which can be used to consume rows.
         """
-        return self.snapshot().read(
-            table, columns, keyset, index, limit, resume_token)
+        return self.snapshot().read(table, columns, keyset, index, limit)
 
-    def execute_sql(self, sql, params=None, param_types=None, query_mode=None,
-                    resume_token=b''):
+    def execute_sql(self, sql, params=None, param_types=None, query_mode=None):
         """Perform an ``ExecuteStreamingSql`` API request.
 
         :type sql: str
@@ -215,14 +210,11 @@ class Session(object):
         :param query_mode: Mode governing return of results / query plan. See
             https://cloud.google.com/spanner/reference/rpc/google.spanner.v1#google.spanner.v1.ExecuteSqlRequest.QueryMode1
 
-        :type resume_token: bytes
-        :param resume_token: token for resuming previously-interrupted query
-
         :rtype: :class:`~google.cloud.spanner.streamed.StreamedResultSet`
         :returns: a result set instance which can be used to consume rows.
         """
         return self.snapshot().execute_sql(
-            sql, params, param_types, query_mode, resume_token)
+            sql, params, param_types, query_mode)
 
     def batch(self):
         """Factory to create a batch for this session.
@@ -248,6 +240,7 @@ class Session(object):
 
         if self._transaction is not None:
             self._transaction._rolled_back = True
+            del self._transaction
 
         txn = self._transaction = Transaction(self)
         return txn
@@ -286,7 +279,7 @@ class Session(object):
                 txn.begin()
             try:
                 return_value = func(txn, *args, **kw)
-            except GaxError as exc:
+            except (GaxError, GrpcRendezvous) as exc:
                 _delay_until_retry(exc, deadline)
                 del self._transaction
                 continue
@@ -318,7 +311,12 @@ def _delay_until_retry(exc, deadline):
     :type deadline: float
     :param deadline: maximum timestamp to continue retrying the transaction.
     """
-    if exc_to_code(exc.cause) != StatusCode.ABORTED:
+    if isinstance(exc, GrpcRendezvous):  # pragma: NO COVER  see #3663
+        cause = exc
+    else:
+        cause = exc.cause
+
+    if exc_to_code(cause) != StatusCode.ABORTED:
         raise
 
     now = time.time()
@@ -326,7 +324,7 @@ def _delay_until_retry(exc, deadline):
     if now >= deadline:
         raise
 
-    delay = _get_retry_delay(exc)
+    delay = _get_retry_delay(cause)
     if delay is not None:
 
         if now + delay > deadline:
@@ -336,7 +334,7 @@ def _delay_until_retry(exc, deadline):
 # pylint: enable=misplaced-bare-raise
 
 
-def _get_retry_delay(exc):
+def _get_retry_delay(cause):
     """Helper for :func:`_delay_until_retry`.
 
     :type exc: :class:`google.gax.errors.GaxError`
@@ -345,7 +343,7 @@ def _get_retry_delay(exc):
     :rtype: float
     :returns: seconds to wait before retrying the transaction.
     """
-    metadata = dict(exc.cause.trailing_metadata())
+    metadata = dict(cause.trailing_metadata())
     retry_info_pb = metadata.get('google.rpc.retryinfo-bin')
     if retry_info_pb is not None:
         retry_info = RetryInfo()

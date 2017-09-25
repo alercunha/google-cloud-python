@@ -51,7 +51,7 @@ SETUP_BASE = {
 
 
 REQUIREMENTS = [
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
     'google-gax >= 0.15.14, < 0.16dev',
     'googleapis-common-protos[grpc] >= 1.5.2, < 2.0dev',
 ]
@@ -61,16 +61,12 @@ EXTRAS_REQUIRE = {
 
 setup(
     name='google-cloud-language',
-    version='0.27.0',
+    version='0.29.0',
     description='Python Client for Google Cloud Natural Language',
     long_description=README,
     namespace_packages=[
         'google',
         'google.cloud',
-        'google.cloud.gapic',
-        'google.cloud.gapic.language',
-        'google.cloud.proto',
-        'google.cloud.proto.language',
     ],
     packages=find_packages(exclude=('tests*',)),
     install_requires=REQUIREMENTS,

@@ -8,7 +8,7 @@
   datastore/usage
   dns/usage
   language/usage
-  pubsub/usage
+  pubsub/index
   resource-manager/api
   runtimeconfig/usage
   spanner/usage
@@ -19,6 +19,7 @@
   storage/client
   translate/usage
   vision/index
+  videointelligence/index
 
 Google Cloud Client Library for Python
 ======================================

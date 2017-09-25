@@ -51,14 +51,14 @@ SETUP_BASE = {
 
 
 REQUIREMENTS = [
-    'google-cloud-core >= 0.26.0, < 0.27dev',
+    'google-cloud-core >= 0.27.0, < 0.28dev',
     'google-gax>=0.15.7, <0.16dev',
     'gapic-google-cloud-datastore-v1 >= 0.15.0, < 0.16dev',
 ]
 
 setup(
     name='google-cloud-datastore',
-    version='1.2.0',
+    version='1.3.0',
     description='Python Client for Google Cloud Datastore',
     long_description=README,
     namespace_packages=[

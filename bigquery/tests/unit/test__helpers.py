@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import base64
+import datetime
 import unittest
+
+import mock
 
 
 class Test_not_null(unittest.TestCase):
@@ -142,16 +146,12 @@ class Test_bytes_from_json(unittest.TestCase):
             self._call_fut(None, _Field('REQUIRED'))
 
     def test_w_base64_encoded_bytes(self):
-        import base64
-
         expected = b'Wonderful!'
         encoded = base64.standard_b64encode(expected)
         coerced = self._call_fut(encoded, object())
         self.assertEqual(coerced, expected)
 
     def test_w_base64_encoded_text(self):
-        import base64
-
         expected = b'Wonderful!'
         encoded = base64.standard_b64encode(expected).decode('ascii')
         coerced = self._call_fut(encoded, object())
@@ -173,7 +173,6 @@ class Test_timestamp_from_json(unittest.TestCase):
             self._call_fut(None, _Field('REQUIRED'))
 
     def test_w_string_value(self):
-        import datetime
         from google.cloud._helpers import _EPOCH
 
         coerced = self._call_fut('1.234567', object())
@@ -182,7 +181,6 @@ class Test_timestamp_from_json(unittest.TestCase):
             _EPOCH + datetime.timedelta(seconds=1, microseconds=234567))
 
     def test_w_float_value(self):
-        import datetime
         from google.cloud._helpers import _EPOCH
 
         coerced = self._call_fut(1.234567, object())
@@ -206,12 +204,16 @@ class Test_datetime_from_json(unittest.TestCase):
             self._call_fut(None, _Field('REQUIRED'))
 
     def test_w_string_value(self):
-        import datetime
-
         coerced = self._call_fut('2016-12-02T18:51:33', object())
         self.assertEqual(
             coerced,
             datetime.datetime(2016, 12, 2, 18, 51, 33))
+
+    def test_w_microseconds(self):
+        coerced = self._call_fut('2015-05-22T10:11:12.987654', object())
+        self.assertEqual(
+            coerced,
+            datetime.datetime(2015, 5, 22, 10, 11, 12, 987654))
 
 
 class Test_date_from_json(unittest.TestCase):
@@ -229,8 +231,6 @@ class Test_date_from_json(unittest.TestCase):
             self._call_fut(None, _Field('REQUIRED'))
 
     def test_w_string_value(self):
-        import datetime
-
         coerced = self._call_fut('1987-09-22', object())
         self.assertEqual(
             coerced,
@@ -252,8 +252,6 @@ class Test_time_from_json(unittest.TestCase):
             self._call_fut(None, _Field('REQUIRED'))
 
     def test_w_string_value(self):
-        import datetime
-
         coerced = self._call_fut('12:12:27', object())
         self.assertEqual(
             coerced,
@@ -576,15 +574,11 @@ class Test_timestamp_to_json_parameter(unittest.TestCase):
         self.assertEqual(self._call_fut(ZULU), ZULU)
 
     def test_w_datetime_wo_zone(self):
-        import datetime
-
         ZULU = '2016-12-20 15:58:27.339328+00:00'
         when = datetime.datetime(2016, 12, 20, 15, 58, 27, 339328)
         self.assertEqual(self._call_fut(when), ZULU)
 
     def test_w_datetime_w_non_utc_zone(self):
-        import datetime
-
         class _Zone(datetime.tzinfo):
 
             def utcoffset(self, _):
@@ -596,7 +590,6 @@ class Test_timestamp_to_json_parameter(unittest.TestCase):
         self.assertEqual(self._call_fut(when), ZULU)
 
     def test_w_datetime_w_utc_zone(self):
-        import datetime
         from google.cloud._helpers import UTC
 
         ZULU = '2016-12-20 15:58:27.339328+00:00'
@@ -619,7 +612,6 @@ class Test_timestamp_to_json_row(unittest.TestCase):
         self.assertEqual(self._call_fut(ZULU), ZULU)
 
     def test_w_datetime(self):
-        import datetime
         from google.cloud._helpers import _microseconds_from_datetime
 
         when = datetime.datetime(2016, 12, 20, 15, 58, 27, 339328)
@@ -639,7 +631,6 @@ class Test_datetime_to_json(unittest.TestCase):
         self.assertEqual(self._call_fut(RFC3339), RFC3339)
 
     def test_w_datetime(self):
-        import datetime
         from google.cloud._helpers import UTC
 
         when = datetime.datetime(2016, 12, 3, 14, 11, 27, 123456, tzinfo=UTC)
@@ -658,8 +649,6 @@ class Test_date_to_json(unittest.TestCase):
         self.assertEqual(self._call_fut(RFC3339), RFC3339)
 
     def test_w_datetime(self):
-        import datetime
-
         when = datetime.date(2016, 12, 3)
         self.assertEqual(self._call_fut(when), '2016-12-03')
 
@@ -676,8 +665,6 @@ class Test_time_to_json(unittest.TestCase):
         self.assertEqual(self._call_fut(RFC3339), RFC3339)
 
     def test_w_datetime(self):
-        import datetime
-
         when = datetime.time(12, 13, 41)
         self.assertEqual(self._call_fut(when), '12:13:41')
 
@@ -814,6 +801,18 @@ class Test_UDFResourcesProperty(unittest.TestCase):
         _, klass = self._descriptor_and_klass()
         instance = klass()
         self.assertEqual(instance.udf_resources, [])
+
+    def test_resource_equality(self):
+        from google.cloud.bigquery._helpers import UDFResource
+
+        resource1a = UDFResource('resourceUri', 'gs://bucket/file.js')
+        resource1b = UDFResource('resourceUri', 'gs://bucket/file.js')
+        resource2 = UDFResource('resourceUri', 'gs://bucket/other.js')
+
+        self.assertEqual(resource1a, resource1b)
+        self.assertNotEqual(resource1a, resource2)
+        self.assertNotEqual(resource1a, object())
+        self.assertEqual(resource1a, mock.ANY)
 
     def test_instance_getter_w_non_empty_list(self):
         from google.cloud.bigquery._helpers import UDFResource
@@ -992,7 +991,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
 
     def test_to_api_repr_w_timestamp_datetime(self):
         from google.cloud._helpers import UTC
-        import datetime
 
         STAMP = '2016-12-20 15:58:27.339328+00:00'
         when = datetime.datetime(2016, 12, 20, 15, 58, 27, 339328, tzinfo=UTC)
@@ -1009,7 +1007,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
     def test_to_api_repr_w_timestamp_micros(self):
-        import datetime
         from google.cloud._helpers import _microseconds_from_datetime
 
         now = datetime.datetime.utcnow()
@@ -1027,7 +1024,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
     def test_to_api_repr_w_datetime_datetime(self):
-        import datetime
         from google.cloud._helpers import _datetime_to_rfc3339
 
         now = datetime.datetime.utcnow()
@@ -1044,7 +1040,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
     def test_to_api_repr_w_datetime_string(self):
-        import datetime
         from google.cloud._helpers import _datetime_to_rfc3339
 
         now = datetime.datetime.utcnow()
@@ -1062,8 +1057,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
     def test_to_api_repr_w_date_date(self):
-        import datetime
-
         today = datetime.date.today()
         EXPECTED = {
             'parameterType': {
@@ -1078,8 +1071,6 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
     def test_to_api_repr_w_date_string(self):
-        import datetime
-
         today = datetime.date.today()
         today_str = today.isoformat(),
         EXPECTED = {
@@ -1106,6 +1097,55 @@ class Test_ScalarQueryParameter(unittest.TestCase):
         klass = self._get_target_class()
         param = klass.positional(type_='UNKNOWN', value='unknown')
         self.assertEqual(param.to_api_repr(), EXPECTED)
+
+    def test___eq___wrong_type(self):
+        field = self._make_one('test', 'STRING', 'value')
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___eq___name_mismatch(self):
+        field = self._make_one('test', 'STRING', 'value')
+        other = self._make_one('other', 'STRING', 'value')
+        self.assertNotEqual(field, other)
+
+    def test___eq___field_type_mismatch(self):
+        field = self._make_one('test', 'STRING', None)
+        other = self._make_one('test', 'INT64', None)
+        self.assertNotEqual(field, other)
+
+    def test___eq___value_mismatch(self):
+        field = self._make_one('test', 'STRING', 'hello')
+        other = self._make_one('test', 'STRING', 'world')
+        self.assertNotEqual(field, other)
+
+    def test___eq___hit(self):
+        field = self._make_one('test', 'STRING', 'gotcha')
+        other = self._make_one('test', 'STRING', 'gotcha')
+        self.assertEqual(field, other)
+
+    def test___ne___wrong_type(self):
+        field = self._make_one('toast', 'INT64', 13)
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___ne___same_value(self):
+        field1 = self._make_one('test', 'INT64', 12)
+        field2 = self._make_one('test', 'INT64', 12)
+        # unittest ``assertEqual`` uses ``==`` not ``!=``.
+        comparison_val = (field1 != field2)
+        self.assertFalse(comparison_val)
+
+    def test___ne___different_values(self):
+        field1 = self._make_one('test', 'INT64', 11)
+        field2 = self._make_one('test', 'INT64', 12)
+        self.assertNotEqual(field1, field2)
+
+    def test___repr__(self):
+        field1 = self._make_one('field1', 'STRING', 'value')
+        expected = "ScalarQueryParameter('field1', 'STRING', 'value')"
+        self.assertEqual(repr(field1), expected)
 
 
 def _make_subparam(name, type_, value):
@@ -1188,6 +1228,58 @@ class Test_ArrayQueryParameter(unittest.TestCase):
         self.assertEqual(param.name, None)
         self.assertEqual(param.array_type, 'INT64')
         self.assertEqual(param.values, [1, 2])
+
+    def test_from_api_repr_w_struct_type(self):
+        from google.cloud.bigquery._helpers import StructQueryParameter
+
+        RESOURCE = {
+            'parameterType': {
+                'type': 'ARRAY',
+                'arrayType': {
+                    'type': 'STRUCT',
+                    'structTypes': [
+                        {
+                            'name': 'name',
+                            'type': {'type': 'STRING'},
+                        },
+                        {
+                            'name': 'age',
+                            'type': {'type': 'INT64'},
+                        },
+                    ],
+                },
+            },
+            'parameterValue': {
+                'arrayValues': [
+                    {
+                        'structValues': {
+                            'name': {'value': 'Phred Phlyntstone'},
+                            'age': {'value': '32'},
+                        },
+                    },
+                    {
+                        'structValues': {
+                            'name': {
+                                'value': 'Bharney Rhubbyl',
+                            },
+                            'age': {'value': '31'},
+                        },
+                    },
+                ],
+            },
+        }
+
+        klass = self._get_target_class()
+        param = klass.from_api_repr(RESOURCE)
+
+        phred = StructQueryParameter.positional(
+            _make_subparam('name', 'STRING', 'Phred Phlyntstone'),
+            _make_subparam('age', 'INT64', 32))
+        bharney = StructQueryParameter.positional(
+            _make_subparam('name', 'STRING', 'Bharney Rhubbyl'),
+            _make_subparam('age', 'INT64', 31))
+        self.assertEqual(param.array_type, 'STRUCT')
+        self.assertEqual(param.values, [phred, bharney])
 
     def test_to_api_repr_w_name(self):
         EXPECTED = {
@@ -1285,6 +1377,55 @@ class Test_ArrayQueryParameter(unittest.TestCase):
         param = klass.positional(array_type='RECORD', values=[struct])
         self.assertEqual(param.to_api_repr(), EXPECTED)
 
+    def test___eq___wrong_type(self):
+        field = self._make_one('test', 'STRING', ['value'])
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___eq___name_mismatch(self):
+        field = self._make_one('field', 'STRING', ['value'])
+        other = self._make_one('other', 'STRING', ['value'])
+        self.assertNotEqual(field, other)
+
+    def test___eq___field_type_mismatch(self):
+        field = self._make_one('test', 'STRING', [])
+        other = self._make_one('test', 'INT64', [])
+        self.assertNotEqual(field, other)
+
+    def test___eq___value_mismatch(self):
+        field = self._make_one('test', 'STRING', ['hello'])
+        other = self._make_one('test', 'STRING', ['hello', 'world'])
+        self.assertNotEqual(field, other)
+
+    def test___eq___hit(self):
+        field = self._make_one('test', 'STRING', ['gotcha'])
+        other = self._make_one('test', 'STRING', ['gotcha'])
+        self.assertEqual(field, other)
+
+    def test___ne___wrong_type(self):
+        field = self._make_one('toast', 'INT64', [13])
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___ne___same_value(self):
+        field1 = self._make_one('test', 'INT64', [12])
+        field2 = self._make_one('test', 'INT64', [12])
+        # unittest ``assertEqual`` uses ``==`` not ``!=``.
+        comparison_val = (field1 != field2)
+        self.assertFalse(comparison_val)
+
+    def test___ne___different_values(self):
+        field1 = self._make_one('test', 'INT64', [11])
+        field2 = self._make_one('test', 'INT64', [12])
+        self.assertNotEqual(field1, field2)
+
+    def test___repr__(self):
+        field1 = self._make_one('field1', 'STRING', ['value'])
+        expected = "ArrayQueryParameter('field1', 'STRING', ['value'])"
+        self.assertEqual(repr(field1), expected)
+
 
 class Test_StructQueryParameter(unittest.TestCase):
 
@@ -1358,6 +1499,81 @@ class Test_StructQueryParameter(unittest.TestCase):
         self.assertEqual(param.name, None)
         self.assertEqual(param.struct_types, {'bar': 'INT64', 'baz': 'STRING'})
         self.assertEqual(param.struct_values, {'bar': 123, 'baz': 'abc'})
+
+    def test_from_api_repr_w_nested_array(self):
+        from google.cloud.bigquery._helpers import ArrayQueryParameter
+
+        RESOURCE = {
+            'name': 'foo',
+            'parameterType': {
+                'type': 'STRUCT',
+                'structTypes': [
+                    {'name': 'bar', 'type': {'type': 'STRING'}},
+                    {'name': 'baz', 'type': {
+                        'type': 'ARRAY',
+                        'arrayType': {'type': 'INT64'},
+                    }},
+                ],
+            },
+            'parameterValue': {
+                'structValues': {
+                    'bar': {'value': 'abc'},
+                    'baz': {'arrayValues': [
+                        {'value': '123'},
+                        {'value': '456'},
+                    ]},
+                },
+            },
+        }
+        klass = self._get_target_class()
+        param = klass.from_api_repr(RESOURCE)
+        self.assertEqual(
+            param,
+            self._make_one(
+                'foo',
+                _make_subparam('bar', 'STRING', 'abc'),
+                ArrayQueryParameter('baz', 'INT64', [123, 456])))
+
+    def test_from_api_repr_w_nested_struct(self):
+        RESOURCE = {
+            'name': 'foo',
+            'parameterType': {
+                'type': 'STRUCT',
+                'structTypes': [
+                    {'name': 'bar', 'type': {'type': 'STRING'}},
+                    {'name': 'baz', 'type': {
+                        'type': 'STRUCT',
+                        'structTypes': [
+                            {'name': 'qux', 'type': {'type': 'INT64'}},
+                            {'name': 'spam', 'type': {'type': 'BOOL'}},
+                        ],
+                    }},
+                ],
+            },
+            'parameterValue': {
+                'structValues': {
+                    'bar': {'value': 'abc'},
+                    'baz': {'structValues': {
+                        'qux': {'value': '123'},
+                        'spam': {'value': 'true'},
+                    }},
+                },
+            },
+        }
+
+        klass = self._get_target_class()
+        param = klass.from_api_repr(RESOURCE)
+
+        expected = self._make_one(
+            'foo',
+            _make_subparam('bar', 'STRING', 'abc'),
+            self._make_one(
+                'baz',
+                _make_subparam('qux', 'INT64', 123),
+                _make_subparam('spam', 'BOOL', True)))
+        self.assertEqual(param.name, 'foo')
+        self.assertEqual(param.struct_types, expected.struct_types)
+        self.assertEqual(param.struct_values, expected.struct_values)
 
     def test_to_api_repr_w_name(self):
         EXPECTED = {
@@ -1465,6 +1681,72 @@ class Test_StructQueryParameter(unittest.TestCase):
         sub = self._make_one('baz', scalar_2, scalar_3)
         param = self._make_one('foo', scalar_1, sub)
         self.assertEqual(param.to_api_repr(), EXPECTED)
+
+    def test___eq___wrong_type(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'abc'))
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___eq___name_mismatch(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'abc'))
+        other = self._make_one(
+            'other ', _make_subparam('bar', 'STRING', 'abc'))
+        self.assertNotEqual(field, other)
+
+    def test___eq___field_type_mismatch(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', None))
+        other = self._make_one(
+            'test', _make_subparam('bar', 'INT64', None))
+        self.assertNotEqual(field, other)
+
+    def test___eq___value_mismatch(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'hello'))
+        other = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'world'))
+        self.assertNotEqual(field, other)
+
+    def test___eq___hit(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'gotcha'))
+        other = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'gotcha'))
+        self.assertEqual(field, other)
+
+    def test___ne___wrong_type(self):
+        field = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'hello'))
+        other = object()
+        self.assertNotEqual(field, other)
+        self.assertEqual(field, mock.ANY)
+
+    def test___ne___same_value(self):
+        field1 = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'hello'))
+        field2 = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'hello'))
+        # unittest ``assertEqual`` uses ``==`` not ``!=``.
+        comparison_val = (field1 != field2)
+        self.assertFalse(comparison_val)
+
+    def test___ne___different_values(self):
+        field1 = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'hello'))
+        field2 = self._make_one(
+            'test', _make_subparam('bar', 'STRING', 'world'))
+        self.assertNotEqual(field1, field2)
+
+    def test___repr__(self):
+        field1 = self._make_one(
+            'test', _make_subparam('field1', 'STRING', 'hello'))
+        got = repr(field1)
+        self.assertIn('StructQueryParameter', got)
+        self.assertIn("'field1', 'STRING'", got)
+        self.assertIn("'field1': 'hello'", got)
 
 
 class Test_QueryParametersProperty(unittest.TestCase):
