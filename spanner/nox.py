@@ -19,7 +19,10 @@ import os
 import nox
 
 
-LOCAL_DEPS = ('../core/',)
+LOCAL_DEPS = (
+    os.path.join('..', 'api_core'),
+    os.path.join('..', 'core'),
+)
 
 
 @nox.session
@@ -42,6 +45,7 @@ def unit_tests(session, python_version):
         'py.test',
         '--quiet',
         '--cov=google.cloud.spanner',
+        '--cov=google.cloud.spanner_v1',
         '--cov=tests.unit',
         '--cov-append',
         '--cov-config=.coveragerc',
@@ -68,13 +72,13 @@ def system_tests(session, python_version):
     session.virtualenv_dirname = 'sys-' + python_version
 
     # Install all test dependencies, then install this package into the
-    # virutalenv's dist-packages.
+    # virtualenv's dist-packages.
     session.install('mock', 'pytest', *LOCAL_DEPS)
     session.install('../test_utils/')
-    session.install('.')
+    session.install('-e', '.')
 
     # Run py.test against the system tests.
-    session.run('py.test', '--quiet', 'tests/system')
+    session.run('py.test', '--quiet', 'tests/system', *session.posargs)
 
 
 @nox.session

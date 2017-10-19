@@ -19,7 +19,10 @@ import os
 import nox
 
 
-LOCAL_DEPS = ('../core/',)
+LOCAL_DEPS = (
+    os.path.join('..', 'api_core'),
+    os.path.join('..', 'core'),
+)
 
 
 @nox.session
@@ -68,7 +71,7 @@ def system_tests(session, python_version):
     session.virtualenv_dirname = 'sys-' + python_version
 
     # Install all test dependencies, then install this package into the
-    # virutalenv's dist-packages.
+    # virtualenv's dist-packages.
     session.install('mock', 'pytest', *LOCAL_DEPS)
     session.install('../test_utils/')
     session.install('.')
@@ -92,7 +95,7 @@ def doctests(session):
     session.interpreter = 'python3.6'
 
     # Install all test dependencies, then install this package into the
-    # virutalenv's dist-packages.
+    # virtualenv's dist-packages.
     session.install('mock', 'pytest', 'sphinx', *LOCAL_DEPS)
     session.install('../test_utils/')
     session.install('.')

@@ -21,23 +21,26 @@ import threading
 import time
 import unittest
 
-from google.cloud.proto.spanner.v1.type_pb2 import ARRAY
-from google.cloud.proto.spanner.v1.type_pb2 import BOOL
-from google.cloud.proto.spanner.v1.type_pb2 import BYTES
-from google.cloud.proto.spanner.v1.type_pb2 import DATE
-from google.cloud.proto.spanner.v1.type_pb2 import FLOAT64
-from google.cloud.proto.spanner.v1.type_pb2 import INT64
-from google.cloud.proto.spanner.v1.type_pb2 import STRING
-from google.cloud.proto.spanner.v1.type_pb2 import TIMESTAMP
-from google.cloud.proto.spanner.v1.type_pb2 import Type
+from google.cloud.spanner_v1.proto.type_pb2 import ARRAY
+from google.cloud.spanner_v1.proto.type_pb2 import BOOL
+from google.cloud.spanner_v1.proto.type_pb2 import BYTES
+from google.cloud.spanner_v1.proto.type_pb2 import DATE
+from google.cloud.spanner_v1.proto.type_pb2 import FLOAT64
+from google.cloud.spanner_v1.proto.type_pb2 import INT64
+from google.cloud.spanner_v1.proto.type_pb2 import STRING
+from google.cloud.spanner_v1.proto.type_pb2 import TIMESTAMP
+from google.cloud.spanner_v1.proto.type_pb2 import Type
+from google.gax.grpc import exc_to_code
+from google.gax import errors
+from grpc import StatusCode
 
 from google.cloud._helpers import UTC
 from google.cloud.exceptions import GrpcRendezvous
-from google.cloud.spanner._helpers import TimestampWithNanoseconds
-from google.cloud.spanner.client import Client
-from google.cloud.spanner.keyset import KeyRange
-from google.cloud.spanner.keyset import KeySet
-from google.cloud.spanner.pool import BurstyPool
+from google.cloud.spanner_v1._helpers import TimestampWithNanoseconds
+from google.cloud.spanner import Client
+from google.cloud.spanner import KeyRange
+from google.cloud.spanner import KeySet
+from google.cloud.spanner import BurstyPool
 
 from test_utils.retry import RetryErrors
 from test_utils.retry import RetryInstanceState
@@ -73,7 +76,6 @@ class Config(object):
 
 def _retry_on_unavailable(exc):
     """Retry only errors whose status code is 'UNAVAILABLE'."""
-    from grpc import StatusCode
     return exc.code() == StatusCode.UNAVAILABLE
 
 
@@ -346,6 +348,31 @@ class TestDatabaseAPI(unittest.TestCase, _TestData):
         with self._db.snapshot() as after:
             rows = list(after.execute_sql(self.SQL))
         self._check_row_data(rows)
+
+    def test_db_run_in_transaction_twice_4181(self):
+        retry = RetryInstanceState(_has_all_ddl)
+        retry(self._db.reload)()
+
+        with self._db.batch() as batch:
+            batch.delete(COUNTERS_TABLE, self.ALL)
+
+        def _unit_of_work(transaction, name):
+            transaction.insert(COUNTERS_TABLE, COUNTERS_COLUMNS, [[name, 0]])
+
+        self._db.run_in_transaction(_unit_of_work, name='id_1')
+
+        with self.assertRaises(errors.RetryError) as expected:
+            self._db.run_in_transaction(_unit_of_work, name='id_1')
+
+        self.assertEqual(
+            exc_to_code(expected.exception.cause), StatusCode.ALREADY_EXISTS)
+
+        self._db.run_in_transaction(_unit_of_work, name='id_2')
+
+        with self._db.snapshot() as after:
+            rows = list(after.read(
+                COUNTERS_TABLE, COUNTERS_COLUMNS, self.ALL))
+        self.assertEqual(len(rows), 2)
 
 
 class TestSessionAPI(unittest.TestCase, _TestData):

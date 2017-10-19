@@ -34,6 +34,7 @@ The following client libraries have **beta** support:
 -  `Google BigQuery`_ (`BigQuery README`_)
 -  `Google Cloud Natural Language`_ (`Natural Language README`_)
 -  `Google Cloud Pub/Sub`_ (`Pub/Sub README`_)
+-  `Google Cloud Spanner`_ (`Spanner README`_)
 -  `Google Cloud Speech`_ (`Speech README`_)
 -  `Google Cloud Video Intelligence`_ (`Video Intelligence README`_)
 -  `Google Cloud Vision`_ (`Vision README`_)
@@ -50,7 +51,6 @@ Cloud Platform services:
 -  `Google Cloud DNS`_ (`DNS README`_)
 -  `Google Cloud Resource Manager`_ (`Resource Manager README`_)
 -  `Google Cloud Runtime Configuration`_ (`Runtime Config README`_)
--  `Google Cloud Spanner`_ (`Spanner README`_)
 -  `Stackdriver Error Reporting`_ (`Error Reporting README`_)
 -  `Stackdriver Monitoring`_ (`Monitoring README`_)
 
@@ -108,6 +108,10 @@ Quick Start
 
     $ pip install --upgrade google-cloud
 
+Fore more information on setting up your Python development environment, such as installing ``pip`` on your system, please refer to `Python Development Environment Setup Guide`_ for Google Cloud Platform.
+
+.. _Python Development Environment Setup Guide: https://cloud.google.com/python/setup
+
 Example Applications
 --------------------
 
@@ -127,7 +131,7 @@ You may also find the `authentication document`_ shared by all the
 ``google-cloud-*`` libraries to be helpful.
 
 .. _Authentication section: https://google-cloud-python.readthedocs.io/en/latest/core/auth.html
-.. _authentication document: https://github.com/GoogleCloudPlatform/gcloud-common/tree/master/authentication
+.. _authentication document: https://github.com/GoogleCloudPlatform/google-cloud-common/tree/master/authentication
 
 Contributing
 ------------

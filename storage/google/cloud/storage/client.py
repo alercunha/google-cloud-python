@@ -15,7 +15,7 @@
 """Client for interacting with the Google Cloud Storage API."""
 
 
-from google.api.core import page_iterator
+from google.api_core import page_iterator
 from google.cloud._helpers import _LocalStack
 from google.cloud.client import ClientWithProject
 from google.cloud.exceptions import NotFound
@@ -121,7 +121,7 @@ class Client(ClientWithProject):
         """
         return self._batch_stack.top
 
-    def bucket(self, bucket_name):
+    def bucket(self, bucket_name, user_project=None):
         """Factory constructor for bucket object.
 
         .. note::
@@ -131,10 +131,14 @@ class Client(ClientWithProject):
         :type bucket_name: str
         :param bucket_name: The name of the bucket to be instantiated.
 
+        :type user_project: str
+        :param user_project: (Optional) the project ID to be billed for API
+                             requests made via the bucket.
+
         :rtype: :class:`google.cloud.storage.bucket.Bucket`
         :returns: The bucket object created.
         """
-        return Bucket(client=self, name=bucket_name)
+        return Bucket(client=self, name=bucket_name, user_project=user_project)
 
     def batch(self):
         """Factory constructor for batch object.
@@ -194,7 +198,7 @@ class Client(ClientWithProject):
         except NotFound:
             return None
 
-    def create_bucket(self, bucket_name):
+    def create_bucket(self, bucket_name, requester_pays=None):
         """Create a new bucket.
 
         For example:
@@ -211,10 +215,17 @@ class Client(ClientWithProject):
         :type bucket_name: str
         :param bucket_name: The bucket name to create.
 
+        :type requester_pays: bool
+        :param requester_pays:
+            (Optional) Whether requester pays for API requests for this
+            bucket and its blobs.
+
         :rtype: :class:`google.cloud.storage.bucket.Bucket`
         :returns: The newly created bucket.
         """
         bucket = Bucket(self, name=bucket_name)
+        if requester_pays is not None:
+            bucket.requester_pays = requester_pays
         bucket.create(client=self)
         return bucket
 
@@ -255,7 +266,7 @@ class Client(ClientWithProject):
             response with just the next page token and the language of each
             bucket returned: 'items/id,nextPageToken'
 
-        :rtype: :class:`~google.api.core.page_iterator.Iterator`
+        :rtype: :class:`~google.api_core.page_iterator.Iterator`
         :returns: Iterator of all :class:`~google.cloud.storage.bucket.Bucket`
                   belonging to this project.
         """
@@ -282,7 +293,7 @@ class Client(ClientWithProject):
 def _item_to_bucket(iterator, item):
     """Convert a JSON bucket to the native object.
 
-    :type iterator: :class:`~google.api.core.page_iterator.Iterator`
+    :type iterator: :class:`~google.api_core.page_iterator.Iterator`
     :param iterator: The iterator that has retrieved the item.
 
     :type item: dict
